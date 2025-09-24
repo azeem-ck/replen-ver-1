@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warehouse Replenishment UI</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Google Fonts: Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Define custom color variables */
+:root {
+--bg-main: #F0EFE9;
+--primary-dark: #003C3C;
+--primary-darkest: #0D2021;
+/* State Colors */
+--color-waiting-bg: #DBEAFE; /* Blue 200 */
+--color-waiting-border: #60A5FA; /* Blue 400 */
+--color-selected-bg: #3B82F6; /* Blue */
+--color-selected-border: #1D4ED8; /* Darker Blue */
+--color-finished-bg: #01DC82; /* Green */
+--color-finished-border: #003C3C; /* Dark Teal */
+--color-inactive-bg: #e5e7eb;
+}
+
+body {
+font-family: 'Inter', sans-serif;
+background-color: var(--bg-main);
+color: var(--primary-darkest);
+}
+/* --- Compartment Item States --- */
+.selectable-item {
+display: flex;
+align-items: center;
+justify-content: center;
+position: relative;
+overflow: hidden;
+background-color: var(--color-waiting-bg);
+}
+.item-inactive { background-color: var(--color-inactive-bg); }
+.item-waiting {
+border: 2px dashed var(--color-waiting-border) !important;
+}
+.item-selected {
+border: 4px solid var(--color-selected-border) !important;
+transform: scale(1.05);
+z-index: 10;
+}
+.item-finished {
+background-color: var(--color-finished-bg) !important;
+border: 2px solid var(--color-finished-border) !important;
+}
+
+/* Icon Visibility */
+.selectable-item .icon { display: none; width: 40%; height: 40%; }
+.item-finished .icon-finished { display: block; color: var(--primary-dark); }
+
+/* --- Bin Location Border States --- */
+.bin-location { border-width: 2px; transition: border-color 0.3s; }
+.border-waiting { border-color: #D1D5DB; }
+.border-selected { border-color: var(--color-selected-border) !important; }
+.border-finished { border-color: var(--color-finished-border) !important; }
+
+/* General Styles */
+.nav-link { color: var(--primary-dark); }
+.nav-link:hover { color: var(--primary-darkest); background-color: #e5e7eb; }
+.nav-link-active { background-color: var(--primary-dark); color: white; }
+
+/* --- Animations --- */
+.animation-popup.show {
+display: flex;
+animation: fade-in-out 2.5s ease-in-out forwards;
+}
+
+@keyframes fade-in-out {
+0% { opacity: 0; transform: scale(0.8); }
+20% { opacity: 1; transform: scale(1); }
+80% { opacity: 1; transform: scale(1); }
+100% { opacity: 0; transform: scale(0.8); }
+}
+</style>
+</head>
+<body class="antialiased">
+
+<div id="root" class="flex flex-col h-screen">
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 shadow-sm">
+<div class="container mx-auto px-4">
+<div class="flex items-center justify-between h-16">
+<div class="flex items-center space-x-8">
+<img src="https://placehold.co/150x40/003C3C/FFFFFF?text=Cartesian+Kinetics" alt="Cartesian Kinetics Logo" class="h-10">
+<nav class="hidden md:flex items-center space-x-1">
+<a href="#" class="px-3 py-2 text-sm font-medium rounded-md nav-link">Order Fulfillment</a>
+<a href="#" class="px-3 py-2 text-sm font-medium rounded-md nav-link">Inbounds</a>
+<a href="#" class="px-3 py-2 text-sm font-semibold rounded-md nav-link-active">Replenishment</a>
+<a href="#" class="px-3 py-2 text-sm font-medium rounded-md nav-link">Cycle Count</a>
+</nav>
+</div>
+<div class="flex items-center space-x-4">
+<div class="text-right text-xs text-primary-dark">
+<div id="date-time">01:40 PM Thu 2025</div>
+<div>John Doe</div>
+</div>
+<a href="#" class="cursor-pointer">
+<img src="https://placehold.co/40x40/EFEFEF/333333?text=JD" alt="User Avatar" class="w-10 h-10 rounded-full"
+onerror="this.onerror=null;this.src='https://placehold.co/40x40/EFEFEF/333333?text=JD';">
+</a>
+</div>
+</div>
+</div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-grow p-4 md:p-6">
+<div class="container mx-auto">
+<h2 class="text-lg font-semibold text-primary-darkest mb-4">Replenish Bins</h2>
+<div id="bins-grid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-4">
+<!-- Bins will be dynamically populated by the script -->
+</div>
+<!-- Done Button -->
+<div class="mt-8 flex justify-end">
+<button id="main-done-btn" class="px-8 py-3 bg-gray-400 text-white font-semibold rounded-lg cursor-not-allowed" disabled>All Tasks Complete</button>
+</div>
+</div>
+</main>
+</div>
+
+<!-- Replenishment Modal Dialog -->
+<div id="replenishment-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 text-center flex flex-col space-y-5">
+        <!-- SKU Image -->
+        <div class="w-40 h-40 sm:w-48 sm:h-48 mx-auto bg-gray-200 rounded-lg flex items-center justify-center border">
+            <img id="modal-sku-image" src="" alt="SKU Image" class="rounded-lg max-w-full max-h-full object-contain">
+        </div>
+
+        <!-- SKU Details -->
+        <div class="text-center">
+            <h2 id="modal-item-name" class="text-xl sm:text-2xl font-bold text-primary-darkest"></h2>
+            <p id="modal-sku-id" class="text-xs sm:text-sm text-gray-500 font-mono"></p>
+            <p id="modal-item-description" class="text-sm sm:text-base text-gray-700 mt-2 max-h-24 overflow-y-auto"></p>
+        </div>
+
+        <!-- Quantity Info -->
+        <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+            <div>
+                <p class="text-xs sm:text-sm font-medium text-gray-500 uppercase">Qty Needed</p>
+                <p id="modal-qty-needed" class="text-2xl sm:text-3xl font-bold text-primary-darkest"></p>
+            </div>
+            <div>
+                <p class="text-xs sm:text-sm font-medium text-gray-500 uppercase">Qty Counted</p>
+                <p id="modal-quantity-counter" class="text-2xl sm:text-3xl font-bold text-blue-600"></p>
+            </div>
+        </div>
+        
+        <!-- Quantity Adjuster -->
+        <div class="flex items-center justify-center space-x-4">
+             <button id="modal-minus-btn" class="text-white rounded-full w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center text-3xl sm:text-4xl font-bold transition-transform hover:scale-105 active:scale-95" style="background-color: var(--primary-darkest);">-</button>
+             <button id="modal-plus-btn" class="text-white rounded-full w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center text-3xl sm:text-4xl font-bold transition-transform hover:scale-105 active:scale-95" style="background-color: var(--primary-darkest);">+</button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col space-y-3 pt-4 border-t">
+             <button id="modal-set-zero-btn" class="w-full text-center py-3 px-4 bg-amber-400 text-amber-900 font-semibold rounded-lg hover:bg-amber-500 text-lg">Make Qty as Zero</button>
+             <button id="modal-done-btn" class="w-full text-center py-3 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 text-lg">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Animation Containers -->
+<div id="completion-animation" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-[100] animation-popup">
+    <div id="completion-text" class="text-white text-5xl font-bold p-12 bg-green-500 rounded-2xl shadow-2xl transform">Task Complete!</div>
+</div>
+<div id="new-order-animation" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-[100] animation-popup">
+    <div class="text-white text-5xl font-bold p-12 bg-blue-500 rounded-2xl shadow-2xl transform">New Task List Generated</div>
+</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const binsGrid = document.getElementById('bins-grid');
+    const modal = document.getElementById('replenishment-modal');
+    const mainDoneBtn = document.getElementById('main-done-btn');
+    const dateTimeElement = document.getElementById('date-time');
+    let currentSelectedItem = null;
+    let binData = [];
+
+    // --- DATE & TIME --- //
+    function updateDateTime() {
+        const now = new Date();
+        const options = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true };
+        const timeString = now.toLocaleTimeString('en-US', options).replace(' ', '');
+        const yearString = now.getFullYear();
+        dateTimeElement.textContent = `${timeString} ${now.toLocaleDateString('en-US', {weekday:'short'})} ${yearString}`;
+    }
+
+    // --- DATA GENERATION --- //
+    function generateInitialData() {
+        binData = [
+            { id: '1.1.1.', type: 'empty' },
+            { id: '2.1.1.', type: '2-compartment', items: [{ compartment: 0 }] },
+            { id: '3.1.1.', type: '1-compartment', items: [{ compartment: 0 }] },
+            { id: '4.1.1.', type: '4-compartment', items: [{ compartment: 0 }, { compartment: 2 }, { compartment: 3 }] },
+            { id: '5.1.1.', type: '1-compartment', items: [{ compartment: 0, initialState: 'selected' }] },
+            { id: '6.1.1.', type: 'empty' },
+            { id: '7.1.1.', type: '2-compartment', items: [{ compartment: 1 }] },
+            { id: '8.1.1.', type: 'empty' },
+            { id: '9.1.1.', type: '1-compartment', items: [{ compartment: 0, initialState: 'finished' }] },
+            { id: '10.1.1.', type: 'empty' },
+            { id: '11.1.1.', type: '4-compartment', items: [{ compartment: 1 }] },
+            { id: '12.1.1.', type: 'empty' },
+        ];
+    }
+
+    function generateNewWave() {
+        binData = [];
+        const binTypes = ['1-compartment', '2-compartment', '4-compartment', 'empty'];
+        for (let i = 1; i <= 12; i++) {
+            const binLocationId = `${i}.1.1.`;
+            const randomType = binTypes[Math.floor(Math.random() * binTypes.length)];
+            const newBin = { id: binLocationId, type: randomType, items: [] };
+
+            if (randomType !== 'empty') {
+                let compartmentCount = 1;
+                if (randomType === '2-compartment') compartmentCount = 2;
+                if (randomType === '4-compartment') compartmentCount = 4;
+
+                for (let j = 0; j < compartmentCount; j++) {
+                    if (Math.random() > 0.6) { // 40% chance to need replenishment
+                        newBin.items.push({ compartment: j });
+                    }
+                }
+            }
+            binData.push(newBin);
+        }
+        initializeApp();
+    }
+
+    // --- UI UPDATE FUNCTIONS --- //
+    function getIconSvg() {
+        return `<svg class="icon icon-finished" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    }
+
+    function updateBinState(binLocation) {
+        if (!binLocation) return;
+        const compartments = binLocation.querySelectorAll('.selectable-item');
+        const selectedItem = binLocation.querySelector('.item-selected');
+        const finishedItems = binLocation.querySelectorAll('.item-finished');
+        
+        binLocation.classList.remove('border-selected', 'border-finished');
+        binLocation.classList.add('border-waiting');
+
+        if (selectedItem) {
+            binLocation.classList.remove('border-waiting');
+            binLocation.classList.add('border-selected');
+        } else if (compartments.length > 0 && compartments.length === finishedItems.length) {
+            binLocation.classList.remove('border-waiting');
+            binLocation.classList.add('border-finished');
+        }
+    }
+
+    function checkAllTasksFinished() {
+        const allSelectableItems = document.querySelectorAll('.selectable-item');
+        const allFinishedItems = document.querySelectorAll('.item-finished');
+        if (allSelectableItems.length > 0 && allSelectableItems.length === allFinishedItems.length) {
+            mainDoneBtn.disabled = false;
+            mainDoneBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+            mainDoneBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+        } else {
+            mainDoneBtn.disabled = true;
+            mainDoneBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+            mainDoneBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+        }
+    }
+
+    function showAnimation(type, text) {
+        const animationContainer = document.getElementById(type);
+        const animationText = animationContainer.querySelector('div');
+        if (text) animationText.textContent = text;
+        animationContainer.classList.add('show');
+        animationContainer.classList.remove('hidden');
+
+        setTimeout(() => {
+            animationContainer.classList.remove('show');
+            animationContainer.classList.add('hidden');
+        }, 2400);
+    }
+
+    // --- MODAL LOGIC --- //
+    function openReplenishmentModal(item) {
+        currentSelectedItem = item;
+        
+        // --- Modal State Variables ---
+        const qtyNeeded = Math.floor(Math.random() * 20) + 5; // Random qty needed between 5 and 25
+        let qtyCounted = qtyNeeded;
+
+        // --- Get Modal DOM Elements ---
+        const doneBtn = document.getElementById('modal-done-btn');
+        const plusBtn = document.getElementById('modal-plus-btn');
+        const minusBtn = document.getElementById('modal-minus-btn');
+        const setZeroBtn = document.getElementById('modal-set-zero-btn');
+        const counterDisplay = document.getElementById('modal-quantity-counter');
+        
+        // --- Populate Modal with Item Info ---
+        const randomSkuNum = Math.floor(Math.random() * 100) + 1;
+        document.getElementById('modal-item-name').textContent = `Industrial Widget ${randomSkuNum}`;
+        document.getElementById('modal-item-description').textContent = `A high-quality widget for industrial applications. Part Number ${randomSkuNum}-IW. Made from durable, stress-tested materials.`;
+        document.getElementById('modal-sku-id').textContent = `SKU-${Math.random().toString(36).slice(2, 11).toUpperCase()}`;
+        document.getElementById('modal-sku-image').src = `https://placehold.co/400x400/cccccc/333333?text=SKU-${randomSkuNum}`;
+        document.getElementById('modal-qty-needed').textContent = qtyNeeded;
+
+        // --- Setup Quantity Counter ---
+        const updateCounterDisplay = () => {
+            counterDisplay.textContent = qtyCounted;
+        };
+
+        plusBtn.onclick = () => { qtyCounted++; updateCounterDisplay(); };
+        minusBtn.onclick = () => { if (qtyCounted > 0) { qtyCounted--; updateCounterDisplay(); } };
+        setZeroBtn.onclick = () => { qtyCounted = 0; updateCounterDisplay(); };
+        doneBtn.onclick = () => finishItemSelection();
+
+        updateCounterDisplay(); // Initial call
+        modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+        if (currentSelectedItem) {
+            currentSelectedItem.classList.remove('item-selected');
+            currentSelectedItem.classList.add('item-waiting');
+            updateBinState(currentSelectedItem.closest('.bin-location'));
+            currentSelectedItem = null;
+        }
+        modal.classList.add('hidden');
+    }
+
+    function finishItemSelection() {
+        if (!currentSelectedItem) return;
+        currentSelectedItem.classList.remove('item-selected', 'item-waiting');
+        currentSelectedItem.classList.add('item-finished');
+        currentSelectedItem.innerHTML = getIconSvg();
+        
+        const parentBin = currentSelectedItem.closest('.bin-location');
+        currentSelectedItem = null;
+        modal.classList.add('hidden');
+
+        showAnimation('completion-animation');
+        updateBinState(parentBin);
+        checkAllTasksFinished();
+    }
+
+    // --- APP INITIALIZATION --- //
+    function initializeApp() {
+        binsGrid.innerHTML = '';
+        let hasSetInitialSelected = false;
+
+        binData.forEach(data => {
+            const binWrapper = document.createElement('div');
+            if (data.type === 'empty') {
+                binWrapper.className = 'bg-white border border-gray-300 rounded-lg p-3 flex flex-col aspect-[2/4]';
+                binWrapper.innerHTML = `<div class="flex-grow"></div>`;
+            } else {
+                binWrapper.className = 'bin-location bg-white rounded-lg p-1 flex flex-col aspect-[2/4] border-waiting';
+                let gridClass = '', compartmentCount = 0;
+                if (data.type === '1-compartment') { gridClass = 'grid-cols-1 grid-rows-1'; compartmentCount = 1; }
+                if (data.type === '2-compartment') { gridClass = 'grid-cols-2 grid-rows-1'; compartmentCount = 2; }
+                if (data.type === '4-compartment') { gridClass = 'grid-cols-2 grid-rows-2'; compartmentCount = 4; }
+                
+                let compartmentsHtml = '';
+                for (let i = 0; i < compartmentCount; i++) {
+                    const itemData = data.items.find(item => item.compartment === i);
+                    if (itemData) {
+                        let stateClass = 'item-waiting';
+                        if (itemData.initialState === 'selected' && !hasSetInitialSelected) {
+                            stateClass = 'item-selected';
+                            hasSetInitialSelected = true;
+                        }
+                        if (itemData.initialState === 'finished') {
+                            stateClass = 'item-finished';
+                        }
+                        compartmentsHtml += `<div class="rounded-md cursor-pointer transition-all selectable-item ${stateClass}">${stateClass === 'item-finished' ? getIconSvg() : ''}</div>`;
+                    } else {
+                        compartmentsHtml += `<div class="rounded-md item-inactive"></div>`;
+                    }
+                }
+                binWrapper.innerHTML = `<div class="flex-grow grid ${gridClass} gap-1">${compartmentsHtml}</div>`;
+            }
+            binWrapper.innerHTML += `<p class="text-xs text-center text-primary-dark mt-2">Bin Location:<br>${data.id}</p>`;
+            binsGrid.appendChild(binWrapper);
+            if (data.type !== 'empty') updateBinState(binWrapper);
+        });
+
+        document.querySelectorAll('.selectable-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (item.classList.contains('item-finished') || item === currentSelectedItem) {
+                    return;
+                }
+
+                if(currentSelectedItem) {
+                    closeModal();
+                }
+                
+                document.querySelectorAll('.item-selected').forEach(prev => {
+                    prev.classList.remove('item-selected');
+                    prev.classList.add('item-waiting');
+                    updateBinState(prev.closest('.bin-location'));
+                });
+
+                item.classList.remove('item-waiting');
+                item.classList.add('item-selected');
+                updateBinState(item.closest('.bin-location'));
+                openReplenishmentModal(item);
+            });
+        });
+        checkAllTasksFinished();
+    }
+    
+    // --- GLOBAL EVENT LISTENERS --- //
+    mainDoneBtn.addEventListener('click', () => {
+        if(mainDoneBtn.disabled) return;
+        mainDoneBtn.disabled = true;
+        showAnimation('new-order-animation');
+        setTimeout(generateNewWave, 2500);
+    });
+
+    modal.addEventListener('click', e => { 
+        if (e.target.id === 'replenishment-modal') closeModal(); 
+    });
+    
+    // --- START APP --- //
+    generateInitialData();
+    initializeApp();
+    updateDateTime();
+    setInterval(updateDateTime, 60000); // Update every minute
+});
+</script>
+
+</body>
+</html>
